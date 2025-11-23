@@ -1,0 +1,8 @@
+{
+    "python.defaultInterpreterPath": "C:\\Users\\Xavi-PC\\AppData\\Local\\pypoetry\\Cache\\virtualenvs\\bookly-cQsHHlhY-py3.10\\Scripts\\python.exe",
+    "python.terminal.activateEnvironment": true,
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}/src"
+    ]
+}
+
