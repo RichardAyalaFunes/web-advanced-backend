@@ -1,4 +1,4 @@
-from bookly.auth.userSchemas import UserLoginModel
+from bookly.auth.userDto import UserLoginModel
 
 class LoginUserService:
 

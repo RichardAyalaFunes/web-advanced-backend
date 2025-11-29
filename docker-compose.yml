@@ -12,6 +12,25 @@ services:
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
     container_name: bookly-postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - 6379:6379
+    volumes:
+      - ./data/redis:/data
+    command: redis-server --appendonly yes
+    container_name: bookly-redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   backend:
     build: .
@@ -23,8 +42,15 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-bookly}
+      # IMPORTANTE: Usar 'redis' (nombre del servicio) como hostname en Docker
+      # Si REDIS_HOST está en .env con localhost, se sobrescribe aquí para Docker
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
     ports:
       - 8000:8000
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     container_name: bookly-backend

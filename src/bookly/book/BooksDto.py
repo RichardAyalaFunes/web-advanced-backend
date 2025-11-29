@@ -4,7 +4,7 @@ from datetime import datetime
 from uuid import UUID
 
 
-class Book(BaseModel):
+class BookModel(BaseModel):
     """
     Modelo de dominio para representar un libro.
     
@@ -34,6 +34,7 @@ class BookCreateModel(BaseModel):
     published_date: str
     page_count: int
     language: str
+    # user_uid: Optional[str]
 
 class BookUpdateModel(BaseModel):
     """

@@ -3,24 +3,25 @@ from typing import List
 from sqlmodel.ext.asyncio.session import AsyncSession
 import logging
 
-from .BooksDto import Book, BookUpdateModel, BookCreateModel
+from .BooksDto import BookModel, BookUpdateModel, BookCreateModel
 from .exceptions import BooklyException
 from bookly.book.BookService import BookService
 from bookly.db.main import get_session
-from bookly.auth.dependencies import AccessTokenBearer
+from bookly.auth.dependencies import AccessTokenBearer, RoleChecker
 
 logger = logging.getLogger(__name__)
 
 book_router = APIRouter()
 book_service = BookService()
 access_token_bearer = AccessTokenBearer()
+role_checker = Depends(RoleChecker(["admin", "user"]))
 
 
-@book_router.get("/", response_model=List[Book])
+@book_router.get("/", response_model=List[BookModel], dependencies=[role_checker])
 async def get_all_books(
     session: AsyncSession = Depends(get_session),
-    user_details=Depends(access_token_bearer),
-) -> List[Book]:
+    token_details: dict =Depends(access_token_bearer),
+) -> List[BookModel]:
     """
     Obtiene todos los libros del sistema.
 
@@ -33,6 +34,7 @@ async def get_all_books(
     Raises:
         BooklyException: Si ocurre un error al obtener los libros
     """
+    print(token_details)
     try:
         logger.info("Obteniendo todos los libros")
         books = await book_service.get_all_books(session)
@@ -48,10 +50,40 @@ async def get_all_books(
         )
 
 
-@book_router.post("/", status_code=status.HTTP_201_CREATED, response_model=Book)
+@book_router.get("/user/{user_uid}", response_model=List[BookModel], dependencies=[role_checker])
+async def get_books_by_user(
+    user_uid: str, 
+    session: AsyncSession = Depends(get_session),
+    token_details: dict =Depends(access_token_bearer),
+) -> List[BookModel]:
+    """ PENDIENTE REDACTAR """
+    print(token_details)
+    try:
+        logger.info("Obteniendo todos los libros")
+        books = await book_service.get_books_by_user(user_uid, session)
+        logger.info(f"Se encontraron {len(books)} libros")
+        return books
+    except Exception as e:
+        logger.error(f"Error al obtener libros: {str(e)}")
+        raise BooklyException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message="Error al obtener libros",
+            detail=str(e),
+            error_code="FETCH_ERROR",
+        )
+
+
+@book_router.post(
+    "/",
+    status_code=status.HTTP_201_CREATED,
+    response_model=BookModel,
+    dependencies=[role_checker],
+)
 async def create_a_book(
-    book_data: BookCreateModel, session: AsyncSession = Depends(get_session)
-) -> Book:
+    book_data: BookCreateModel,
+    session: AsyncSession = Depends(get_session),
+    token_details: dict = Depends(access_token_bearer),
+) -> BookModel:
     """
     Crea un nuevo libro en el sistema.
 
@@ -67,7 +99,9 @@ async def create_a_book(
     """
     try:
         logger.info(f"Creando libro: {book_data.title}")
-        new_book = await book_service.create_book(book_data, session)
+        user_uid = token_details.get('user')['user_uid']
+
+        new_book = await book_service.create_book(book_data, user_uid, session)
         logger.info(f"Libro creado exitosamente: {new_book.uid}")
         return new_book
 
@@ -89,8 +123,12 @@ async def create_a_book(
         )
 
 
-@book_router.get("/{book_uid}", response_model=Book)
-async def get_book(book_uid: str, session: AsyncSession = Depends(get_session)) -> Book:
+@book_router.get("/{book_uid}", response_model=BookModel, dependencies=[role_checker])
+async def get_book(
+    book_uid: str,
+    session: AsyncSession = Depends(get_session),
+    token_details: dict =Depends(access_token_bearer),
+) -> BookModel:
     """
     Obtiene un libro por su identificador único.
 
@@ -129,12 +167,13 @@ async def get_book(book_uid: str, session: AsyncSession = Depends(get_session)) 
         )
 
 
-@book_router.patch("/{book_uid}", response_model=Book)
+@book_router.patch("/{book_uid}", response_model=BookModel, dependencies=[role_checker])
 async def update_book(
     book_uid: str,
     book_update_data: BookUpdateModel,
     session: AsyncSession = Depends(get_session),
-) -> Book:
+    token_details: dict =Depends(access_token_bearer),
+) -> BookModel:
     """
     Actualiza un libro existente.
 
@@ -176,9 +215,13 @@ async def update_book(
         )
 
 
-@book_router.delete("/{book_uid}", status_code=status.HTTP_204_NO_CONTENT)
+@book_router.delete(
+    "/{book_uid}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[role_checker]
+)
 async def delete_book(
-    book_uid: str, session: AsyncSession = Depends(get_session)
+    book_uid: str,
+    session: AsyncSession = Depends(get_session),
+    token_details: dict =Depends(access_token_bearer),
 ) -> None:
     """
     Elimina un libro del sistema.

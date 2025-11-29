@@ -77,23 +77,45 @@ def verify_password(password: str, hash: str) -> bool:
 def create_access_token(
     user_data: dict, expiry: timedelta = None, refresh: bool = False
 ):
+    """
+    Crea un token JWT de acceso o refresh.
+    
+    Args:
+        user_data: Diccionario con los datos del usuario
+        expiry: Tiempo de expiración del token (por defecto 1 hora)
+        refresh: Si es True, crea un refresh token; si es False, crea un access token
+        
+    Returns:
+        Token JWT como string
+    """
     payload = {}
 
     payload["user"] = user_data
-    payload["exp"] = datetime.now() + (
-        expiry if expiry is not None else timedelta(seconds=ACCESS_TOKE_EXPIRY)
-    )
+    # JWT exp debe ser un timestamp Unix (int), no un datetime
+    expiry_time = expiry if expiry is not None else timedelta(seconds=ACCESS_TOKE_EXPIRY)
+    payload["exp"] = int((datetime.now() + expiry_time).timestamp())
+    payload["iat"] = int(datetime.now().timestamp())  # Issued at
     payload["jti"] = str(uuid.uuid4())
     payload["refresh"] = refresh
 
+    # jwt.encode siempre devuelve un string en PyJWT 2.x
     token = jwt.encode(
         payload=payload, key=settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM
     )
+    
+    return token  # Siempre es un string
 
-    return token
 
-
-def decode_token(token: str) -> dict:
+def decode_token(token: str) -> dict | None:
+    """
+    Decodifica y verifica un token JWT.
+    
+    Args:
+        token: Token JWT como string (siempre viene del header HTTP como string)
+        
+    Returns:
+        Diccionario con los datos del token si es válido, None en caso contrario
+    """
     try:
         token_data = jwt.decode(
             token, key=settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM]

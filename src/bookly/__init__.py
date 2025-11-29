@@ -17,6 +17,7 @@ from bookly.book.exceptions import (
 from contextlib import asynccontextmanager
 import logging
 from bookly.db.main import init_db, close_db
+from bookly.db.redis import init_redis, close_redis
 import uvicorn
 from bookly.auth.userRouter import auth_router
 
@@ -44,8 +45,13 @@ async def lifespan(app: FastAPI):
     await init_db()
     logger.info("DatabaseConnection - Conexión a la BD exitosa")
     
+    # Redis Connection
+    logger.info("RedisConnection - Inicializando conexión a Redis...")
+    await init_redis()
+    logger.info("RedisConnection - Conexión a Redis exitosa")
+    
     # Aplicación lista 
-    logger.info("DatabaseConnection - Aplicación lista para recibir requests")
+    logger.info("Aplicación lista para recibir requests")
     logger.info("=" * 50)
 
 
@@ -58,6 +64,10 @@ async def lifespan(app: FastAPI):
 
     logger.info("Cerrando conexión a base de datos...")
     await close_db()
+    
+    logger.info("Cerrando conexión a Redis...")
+    await close_redis()
+    
     logger.info("Recursos liberados correctamente")
     
     logger.info("=" * 50)
@@ -79,8 +89,7 @@ app: FastAPI = FastAPI(
         "name": "Richard Ayala",
         "url": "https://github.com/RichardAyalaFunes",
         "email": "ayala.funes06@gmail.com",
-    },
-    lifespan=lifespan
+    }
 )
 
 # Registrar manejadores de excepciones personalizados
