@@ -2,9 +2,11 @@ from typing import Optional
 from pydantic import BaseModel, Field
 from datetime import datetime
 from uuid import UUID
+from typing import List
+from bookly.reviews.reviewDto import ReviewDTO
 
 
-class BookModel(BaseModel):
+class BookDTO(BaseModel):
     """
     Modelo de dominio para representar un libro.
     
@@ -27,7 +29,10 @@ class BookModel(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-class BookCreateModel(BaseModel):
+class BookReviewsDTO(BookDTO):
+    reviews: List[ReviewDTO]
+
+class BookCreateDTO(BaseModel):
     title: str
     author: str
     publisher: str
@@ -36,7 +41,7 @@ class BookCreateModel(BaseModel):
     language: str
     # user_uid: Optional[str]
 
-class BookUpdateModel(BaseModel):
+class BookUpdateDTO(BaseModel):
     """
     Modelo para actualizar información de un libro existente (PATCH).
     Todos los campos son opcionales para permitir actualizaciones parciales.
@@ -55,3 +60,4 @@ class BookUpdateModel(BaseModel):
     published_date: Optional[str] = Field(None, description="Fecha de publicación (YYYY-MM-DD)")
     page_count: Optional[int] = Field(None, gt=0, description="Número de páginas")
     language: Optional[str] = Field(None, min_length=1, description="Idioma del libro")
+ 

@@ -1,15 +1,17 @@
-from passlib.context import CryptContext
 from datetime import timedelta, datetime
+from itsdangerous import URLSafeTimedSerializer
+import bcrypt
 import jwt
 import uuid
 import logging
-from bookly.config import settings
 
-passwrd_context = CryptContext(schemes=["bcrypt"])
+#
+from bookly.config import settings
 
 ACCESS_TOKE_EXPIRY = 3600
 
-
+# 
+# * Password management
 def generate_passwd_hash(password: str) -> str:
     """
     Genera un hash bcrypt de una contraseña.
@@ -34,8 +36,10 @@ def generate_passwd_hash(password: str) -> str:
         )
         password = password_bytes[:72].decode("utf-8", errors="ignore")
 
-    hash = passwrd_context.hash(password)
-    return hash
+    # Generar salt y hash usando bcrypt directamente
+    salt = bcrypt.gensalt()
+    hash_bytes = bcrypt.hashpw(password.encode("utf-8"), salt)
+    return hash_bytes.decode("utf-8")
 
 
 def verify_password(password: str, hash: str) -> bool:
@@ -66,25 +70,29 @@ def verify_password(password: str, hash: str) -> bool:
         password = password_bytes[:72].decode("utf-8", errors="ignore")
 
     try:
-        return passwrd_context.verify(password, hash)
+        # Verificar contraseña usando bcrypt directamente
+        hash_bytes = hash.encode("utf-8")
+        password_bytes = password.encode("utf-8")
+        return bcrypt.checkpw(password_bytes, hash_bytes)
     except (ValueError, TypeError, Exception) as e:
         logging.error(
             f"verify_password: error verifying password - {type(e).__name__}: {e}"
         )
         return False
 
-
+# 
+# * Token Management
 def create_access_token(
     user_data: dict, expiry: timedelta = None, refresh: bool = False
 ):
     """
     Crea un token JWT de acceso o refresh.
-    
+
     Args:
         user_data: Diccionario con los datos del usuario
         expiry: Tiempo de expiración del token (por defecto 1 hora)
         refresh: Si es True, crea un refresh token; si es False, crea un access token
-        
+
     Returns:
         Token JWT como string
     """
@@ -92,7 +100,9 @@ def create_access_token(
 
     payload["user"] = user_data
     # JWT exp debe ser un timestamp Unix (int), no un datetime
-    expiry_time = expiry if expiry is not None else timedelta(seconds=ACCESS_TOKE_EXPIRY)
+    expiry_time = (
+        expiry if expiry is not None else timedelta(seconds=ACCESS_TOKE_EXPIRY)
+    )
     payload["exp"] = int((datetime.now() + expiry_time).timestamp())
     payload["iat"] = int(datetime.now().timestamp())  # Issued at
     payload["jti"] = str(uuid.uuid4())
@@ -102,17 +112,17 @@ def create_access_token(
     token = jwt.encode(
         payload=payload, key=settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM
     )
-    
+
     return token  # Siempre es un string
 
 
 def decode_token(token: str) -> dict | None:
     """
     Decodifica y verifica un token JWT.
-    
+
     Args:
         token: Token JWT como string (siempre viene del header HTTP como string)
-        
+
     Returns:
         Diccionario con los datos del token si es válido, None en caso contrario
     """
@@ -125,3 +135,22 @@ def decode_token(token: str) -> dict | None:
     except jwt.PyJWTError as e:
         logging.exception(e)
         return None
+
+# 
+# * URL tokens
+serializer = URLSafeTimedSerializer(
+    secret_key=settings.JWT_SECRET, salt="email-configuration"
+)
+
+def create_url_safe_token(data: dict):
+    return serializer.dumps(data, salt="email-configuration")
+
+def decode_url_safe_token(token: str):
+    try: 
+        return serializer.loads(token)
+    
+    except Exception as e:
+        logging.error(str(e))
+
+
+

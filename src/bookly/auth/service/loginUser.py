@@ -1,7 +1,7 @@
-from bookly.auth.userDto import UserLoginModel
+from bookly.auth.userDto import UserLoginDTO
 
 class LoginUserService:
 
-    async def execute(self, login_data: UserLoginModel):
+    async def execute(self, login_data: UserLoginDTO):
         pass
         # TODO. PENDIENTE IMPLEMENTAR

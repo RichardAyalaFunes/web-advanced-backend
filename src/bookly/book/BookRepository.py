@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 from bookly.book.BookModel import Book
-from .BooksDto import BookCreateModel, BookUpdateModel
+from .BooksDto import BookCreateDTO, BookUpdateDTO
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import select, desc
 import logging
@@ -9,7 +9,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class BookService:
+class BooksRepository:
     """
     Servicio para gestionar operaciones CRUD de libros.
     """
@@ -63,7 +63,7 @@ class BookService:
         return result.first()
 
     async def create_book(
-        self, book_data: BookCreateModel, user_uid: str, session: AsyncSession
+        self, book_data: BookCreateDTO, user_uid: str, session: AsyncSession
     ) -> Book:
         """
         Crea un nuevo libro en la base de datos.
@@ -87,7 +87,7 @@ class BookService:
         return new_book
 
     async def update_book(
-        self, book_uid: str, update_data: BookUpdateModel, session: AsyncSession
+        self, book_uid: str, update_data: BookUpdateDTO, session: AsyncSession
     ) -> Optional[Book]:
         """
         Actualiza un libro existente (actualización parcial).

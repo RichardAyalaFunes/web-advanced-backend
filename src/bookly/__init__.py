@@ -1,4 +1,3 @@
-
 # * Command to run the app: poetry run uvicorn bookly:app --host 0.0.0.0 --port 8000 --reload
 """
 Bookly API - Aplicación principal.
@@ -7,19 +6,19 @@ Este módulo inicializa la aplicación FastAPI y registra todos los routers.
 """
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
-from bookly.book.BookControllers import book_router
-from bookly.book.exceptions import (
-    BooklyException,
-    bookly_exception_handler,
-    validation_exception_handler,
-    generic_exception_handler
-)
 from contextlib import asynccontextmanager
 import logging
+import uvicorn
+
+# Own package ->
+from bookly.book.BookControllers import book_router
+from bookly.auth.userController import auth_router
+from bookly.reviews.reviewController import review_router
+from bookly.tags.controller import tags_router
+from .errors import register_all_errors
+from .middleware import register_middleware
 from bookly.db.main import init_db, close_db
 from bookly.db.redis import init_redis, close_redis
-import uvicorn
-from bookly.auth.userRouter import auth_router
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -30,49 +29,46 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """
     Gestiona el ciclo de vida de la aplicación.
-    
+
     STARTUP: Inicializa recursos antes de que la app reciba requests.
     SHUTDOWN: Limpia recursos cuando la app se detiene.
-    
+
     Args:
         app: Instancia de FastAPI
     """
     # * STARTUP
     logger.info("Iniciando aplicación...")
-    
+
     # Database Connection
     logger.info("DatabaseConnection - Inicializando conexión a base de datos...")
     await init_db()
     logger.info("DatabaseConnection - Conexión a la BD exitosa")
-    
+
     # Redis Connection
     logger.info("RedisConnection - Inicializando conexión a Redis...")
     await init_redis()
     logger.info("RedisConnection - Conexión a Redis exitosa")
-    
-    # Aplicación lista 
+
+    # Aplicación lista
     logger.info("Aplicación lista para recibir requests")
     logger.info("=" * 50)
 
-
     yield  # ← La aplicación corre aquí y procesa requests
-    
-    
+
     # * SHUTDOWN
     logger.info("=" * 50)
     logger.info(" Deteniendo aplicación...")
 
     logger.info("Cerrando conexión a base de datos...")
     await close_db()
-    
+
     logger.info("Cerrando conexión a Redis...")
     await close_redis()
-    
+
     logger.info("Recursos liberados correctamente")
-    
+
     logger.info("=" * 50)
     logger.info("Aplicación detenida correctamente")
-
 
 
 version: str = "v1"
@@ -89,16 +85,20 @@ app: FastAPI = FastAPI(
         "name": "Richard Ayala",
         "url": "https://github.com/RichardAyalaFunes",
         "email": "ayala.funes06@gmail.com",
-    }
+    },
 )
 
 # Registrar manejadores de excepciones personalizados
-app.add_exception_handler(BooklyException, bookly_exception_handler)
-app.add_exception_handler(RequestValidationError, validation_exception_handler)
-app.add_exception_handler(Exception, generic_exception_handler)
+register_all_errors(app)
 
+# Registrar miggleware 
+register_middleware(app)
+
+# Define controllers/routers
 app.include_router(book_router, prefix=f"{version_prefix}/books", tags=["books"])
 app.include_router(auth_router, prefix=f"{version_prefix}/auth", tags=["auth"])
+app.include_router(review_router, prefix=f"{version_prefix}/reviews", tags=["reviews"])
+app.include_router(tags_router, prefix=f"{version_prefix}/tags", tags=["tags"])
 
 if __name__ == "__main__":
-    uvicorn.run(app, host='0.0.0.0', port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000)

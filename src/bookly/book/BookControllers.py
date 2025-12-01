@@ -3,25 +3,25 @@ from typing import List
 from sqlmodel.ext.asyncio.session import AsyncSession
 import logging
 
-from .BooksDto import BookModel, BookUpdateModel, BookCreateModel
-from .exceptions import BooklyException
-from bookly.book.BookService import BookService
+from .BooksDto import BookDTO, BookUpdateDTO, BookCreateDTO, BookReviewsDTO
+from bookly.errors import BookNotFound, BooklyException
+from bookly.book.BookRepository import BooksRepository
 from bookly.db.main import get_session
 from bookly.auth.dependencies import AccessTokenBearer, RoleChecker
 
 logger = logging.getLogger(__name__)
 
 book_router = APIRouter()
-book_service = BookService()
+book_service = BooksRepository()
 access_token_bearer = AccessTokenBearer()
 role_checker = Depends(RoleChecker(["admin", "user"]))
 
 
-@book_router.get("/", response_model=List[BookModel], dependencies=[role_checker])
+@book_router.get("/", response_model=List[BookDTO], dependencies=[role_checker])
 async def get_all_books(
     session: AsyncSession = Depends(get_session),
     token_details: dict =Depends(access_token_bearer),
-) -> List[BookModel]:
+) -> List[BookDTO]:
     """
     Obtiene todos los libros del sistema.
 
@@ -42,20 +42,15 @@ async def get_all_books(
         return books
     except Exception as e:
         logger.error(f"Error al obtener libros: {str(e)}")
-        raise BooklyException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message="Error al obtener libros",
-            detail=str(e),
-            error_code="FETCH_ERROR",
-        )
+        raise BooklyException(f"Error al obtener libros: {str(e)}")
 
 
-@book_router.get("/user/{user_uid}", response_model=List[BookModel], dependencies=[role_checker])
+@book_router.get("/user/{user_uid}", response_model=List[BookDTO], dependencies=[role_checker])
 async def get_books_by_user(
     user_uid: str, 
     session: AsyncSession = Depends(get_session),
     token_details: dict =Depends(access_token_bearer),
-) -> List[BookModel]:
+) -> List[BookDTO]:
     """ PENDIENTE REDACTAR """
     print(token_details)
     try:
@@ -65,25 +60,20 @@ async def get_books_by_user(
         return books
     except Exception as e:
         logger.error(f"Error al obtener libros: {str(e)}")
-        raise BooklyException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message="Error al obtener libros",
-            detail=str(e),
-            error_code="FETCH_ERROR",
-        )
+        raise BooklyException(f"Error al obtener libros: {str(e)}")
 
 
 @book_router.post(
     "/",
     status_code=status.HTTP_201_CREATED,
-    response_model=BookModel,
+    response_model=BookDTO,
     dependencies=[role_checker],
 )
 async def create_a_book(
-    book_data: BookCreateModel,
+    book_data: BookCreateDTO,
     session: AsyncSession = Depends(get_session),
     token_details: dict = Depends(access_token_bearer),
-) -> BookModel:
+) -> BookDTO:
     """
     Crea un nuevo libro en el sistema.
 
@@ -107,28 +97,18 @@ async def create_a_book(
 
     except ValueError as ve:
         logger.error(f"Error de validación al crear libro: {str(ve)}")
-        raise BooklyException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            message="Error de datos",
-            detail=str(ve),
-            error_code="DATA_ERROR",
-        )
+        raise BooklyException(f"Error de datos: {str(ve)}")
     except Exception as e:
         logger.error(f"Error no identificado al crear libro: {str(e)}")
-        raise BooklyException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message="Error interno del servidor",
-            detail=str(e),
-            error_code="INTERNAL_SERVER_ERROR",
-        )
+        raise BooklyException(f"Error interno del servidor: {str(e)}")
 
 
-@book_router.get("/{book_uid}", response_model=BookModel, dependencies=[role_checker])
+@book_router.get("/{book_uid}", response_model=BookReviewsDTO, dependencies=[role_checker])
 async def get_book(
     book_uid: str,
     session: AsyncSession = Depends(get_session),
     token_details: dict =Depends(access_token_bearer),
-) -> BookModel:
+) -> BookDTO:
     """
     Obtiene un libro por su identificador único.
 
@@ -140,7 +120,8 @@ async def get_book(
         Book: Libro encontrado
 
     Raises:
-        BooklyException: Si el libro no existe
+        BookNotFound: Si el libro no existe
+        BooklyException: Si ocurre un error al buscar el libro
     """
     logger.info(f"Buscando libro con UID: {book_uid}")
     try:
@@ -151,29 +132,21 @@ async def get_book(
             return book
         else:
             logger.warning(f"Libro no encontrado con UID: {book_uid}")
-            raise BooklyException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                message="Libro no encontrado",
-                detail=f"No existe un libro con el UID: {book_uid}",
-                error_code="BOOK_NOT_FOUND",
-            )
+            raise BookNotFound(f"No existe un libro con el UID: {book_uid}")
+    except BookNotFound:
+        raise
     except Exception as e:
         logger.error(f"Error al buscar libro: {str(e)}")
-        raise BooklyException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message="Error al buscar libro",
-            detail=str(e),
-            error_code="FETCH_ERROR",
-        )
+        raise BooklyException(f"Error al buscar libro: {str(e)}")
 
 
-@book_router.patch("/{book_uid}", response_model=BookModel, dependencies=[role_checker])
+@book_router.patch("/{book_uid}", response_model=BookDTO, dependencies=[role_checker])
 async def update_book(
     book_uid: str,
-    book_update_data: BookUpdateModel,
+    book_update_data: BookUpdateDTO,
     session: AsyncSession = Depends(get_session),
     token_details: dict =Depends(access_token_bearer),
-) -> BookModel:
+) -> BookDTO:
     """
     Actualiza un libro existente.
 
@@ -186,7 +159,8 @@ async def update_book(
         Book: Libro actualizado
 
     Raises:
-        BooklyException: Si el libro no existe
+        BookNotFound: Si el libro no existe
+        BooklyException: Si ocurre un error al buscar el libro
     """
     logger.info(f"Actualizando libro con UID: {book_uid}")
 
@@ -199,20 +173,12 @@ async def update_book(
             return updated_book
         else:
             logger.warning(f"No se pudo actualizar, libro no encontrado: {book_uid}")
-            raise BooklyException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                message="Libro no encontrado",
-                detail=f"No existe un libro con el UID: {book_uid}",
-                error_code="BOOK_NOT_FOUND",
-            )
+            raise BookNotFound(f"No existe un libro con el UID: {book_uid}")
+    except BookNotFound:
+        raise
     except Exception as e:
         logger.error(f"Error al actualizar libro: {str(e)}")
-        raise BooklyException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message="Error al actualizar libro",
-            detail=str(e),
-            error_code="UPDATE_ERROR",
-        )
+        raise BooklyException(f"Error al actualizar libro: {str(e)}")
 
 
 @book_router.delete(
@@ -234,7 +200,8 @@ async def delete_book(
         None
 
     Raises:
-        BooklyException: Si el libro no existe
+        BookNotFound: Si el libro no existe
+        BooklyException: Si ocurre un error al buscar el libro
     """
     logger.info(f"Eliminando libro con UID: {book_uid}")
 
@@ -242,12 +209,8 @@ async def delete_book(
         await book_service.delete_book(book_uid, session)
         logger.info(f"Libro eliminado exitosamente: {book_uid}")
         return None
-
+    except BookNotFound:
+        raise
     except Exception as e:
         logger.error(f"Error al eliminar libro: {str(e)}")
-        raise BooklyException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            message="Error al eliminar libro",
-            detail=str(e),
-            error_code="DELETE_ERROR",
-        )
+        raise BooklyException(f"Error al eliminar libro: {str(e)}")

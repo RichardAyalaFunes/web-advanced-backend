@@ -16,7 +16,8 @@ logger = logging.getLogger(__name__)
 
 # Importar modelos para que SQLModel los registre en metadata
 from bookly.book.BookModel import Book
-from bookly.auth.userModel import User  # ← Import User model
+from bookly.auth.userModel import User
+from bookly.reviews.reviewModel import Review
 
 # Crear el motor de base de datos usando la URL desde configuración
 # * Conexión Síncrona (comentada)
@@ -36,7 +37,7 @@ def get_engine() -> AsyncEngine:
     global engine
     if engine is None:
         engine = AsyncEngine(
-            create_engine(url=settings.DATABASE_URL, echo=True)
+            create_engine(url=settings.DATABASE_URL, echo=False)
         )
     return engine
 

@@ -12,6 +12,9 @@ from bookly.config import settings
 # Importar todos los modelos para que Alembic los detecte
 from bookly.auth.userModel import User
 from bookly.book.BookModel import Book
+from bookly.reviews.reviewModel import Review
+from bookly.tags.model import Tag
+
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

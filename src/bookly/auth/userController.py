@@ -1,12 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlmodel.ext.asyncio.session import AsyncSession
 from datetime import timedelta, datetime
 
-from bookly.auth.userDto import UserCreateModel, UserModel, UserLoginModel, UserBooksModel
+from bookly.auth.service.passwordResetConfirm import PasswordResetConfirmService
+from bookly.auth.service.passwordResetRequest import PasswordResetRequestService
+from bookly.auth.userDto import PasswordResetConfirmModel, PasswordResetRequestDTO, UserCreateDTO, UserDTO, UserLoginDTO, UserBooksReviewsDTO, EmailDTO, UserCreateResponseDTO, UserVerifyResponseDTO
 from bookly.db.main import get_session
 from bookly.auth.userRepository import UserRepository
 from bookly.auth.userModel import User
 from bookly.auth.service.createUser import CreateUserService
+from bookly.auth.service.validateUser import ValidateUserService
 from fastapi.responses import JSONResponse
 from .utils import create_access_token, verify_password
 from .dependencies import (
@@ -16,6 +19,9 @@ from .dependencies import (
     RoleChecker,
 )
 from bookly.db.redis import add_jti_to_blocklist
+from bookly.errors import (InvalidCredentials, InvalidToken, UserNotFound)
+from bookly.mail import mail, create_message
+from bookly.db.main import get_session
 
 auth_router = APIRouter()
 role_checker = RoleChecker(["admin", "user"])
@@ -23,9 +29,24 @@ role_checker = RoleChecker(["admin", "user"])
 REFRESH_TOKEN_EXPIRY = 2  # days
 
 
-@auth_router.post("/signup", response_model=UserModel)
+@auth_router.post("/send-email")
+async def send_email(emails: EmailDTO):
+    # emails = emails.addresses
+    html = "<h1>Wel to the App!</h1>"
+
+    message = create_message(
+        recipients=emails.addresses,
+        subject="Welcome",
+        body=html
+    )
+
+    await mail.send_message(message)
+    
+    return {"message": "Email sent successfully."}
+
+@auth_router.post("/signup", response_model=UserCreateResponseDTO)
 async def create_user_account(
-    user_data: UserCreateModel, session: AsyncSession = Depends(get_session)
+    user_data: UserCreateDTO, session: AsyncSession = Depends(get_session)
 ):
     userRepository = UserRepository()
     createUserService = CreateUserService(userRepository)
@@ -33,9 +54,19 @@ async def create_user_account(
     return await createUserService.execute(user_data, session)
 
 
+@auth_router.get("/verify/{token}", response_model=UserVerifyResponseDTO)
+async def verify_user_account(token: str, session: AsyncSession = Depends(get_session)):
+    """
+    Verifica la cuenta de usuario mediante token de verificación.
+    """
+    user_repository = UserRepository()
+    validate_user_service = ValidateUserService(user_repository)
+    
+    return await validate_user_service.execute(token, session)
+
 @auth_router.post("/login")
 async def login_users(
-    login_data: UserLoginModel, session: AsyncSession = Depends(get_session)
+    login_data: UserLoginDTO, session: AsyncSession = Depends(get_session)
 ):
 
     # Esta lógica debería de estar en un Service
@@ -74,9 +105,7 @@ async def login_users(
                 }
             )
 
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password."
-    )
+    raise InvalidCredentials
 
 
 @auth_router.get("/refresh_token")
@@ -88,16 +117,12 @@ async def get_new_access_token(token_details: dict = Depends(RefreshTokenBearer(
 
         return JSONResponse(content={"access_token": new_access_token})
 
-    raise HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail="Invalid or expired refresh token.",
-    )
+    raise InvalidToken
 
-
-@auth_router.get("/me", response_model=UserBooksModel)
+@auth_router.get("/me", response_model=UserBooksReviewsDTO)
 async def get_me(
     user: User = Depends(get_current_user), _: bool = Depends(role_checker)
-) -> UserBooksModel:
+) -> UserBooksReviewsDTO:
     """
     Obtiene la información del usuario actual.
     Requiere autenticación y rol de admin.
@@ -114,3 +139,30 @@ async def revoke_token(token_detail: dict = Depends(AccessTokenBearer())):
     return JSONResponse(
         content={"message": "Loggued out successfully."}, status_code=status.HTTP_200_OK
     )
+
+@auth_router.post("/password-reset-request")
+async def password_reset_request(
+    email_data: PasswordResetRequestDTO, 
+    session: AsyncSession = Depends(get_session)
+):
+    """
+    Solicita el restablecimiento de contraseña enviando un email con el token.
+    """
+    userRepository = UserRepository()
+    passRestRequestService = PasswordResetRequestService(userRepository)
+
+    return await passRestRequestService.execute(email_data, session)
+
+@auth_router.post("/password-reset-confirm/{token}")
+async def password_reset_confirm(
+    token: str,
+    passwords: PasswordResetConfirmModel, 
+    session: AsyncSession = Depends(get_session)
+):
+    """
+    Confirma el restablecimiento de contraseña usando el token recibido por email.
+    """
+    userRepository = UserRepository()
+    passwordResetConfirm = PasswordResetConfirmService(userRepository)
+
+    return await passwordResetConfirm.execute(token, passwords, session)
