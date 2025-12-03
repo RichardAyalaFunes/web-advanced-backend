@@ -21,8 +21,9 @@ async def init_redis() -> None:
     """
     global token_blocklist
     token_blocklist = from_url(
-        f"redis://{settings.REDIS_HOST}:{settings.REDIS_PORT}",
-        db=0,
+        settings.REDIS_URL,
+        # f"redis://{settings.REDIS_HOST}:{settings.REDIS_PORT}",
+        # db=0,
         decode_responses=True
     )
     logger.info(f"Redis conectado en {settings.REDIS_HOST}:{settings.REDIS_PORT}")

@@ -1,10 +1,20 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, status, BackgroundTasks
 from sqlmodel.ext.asyncio.session import AsyncSession
 from datetime import timedelta, datetime
 
 from bookly.auth.service.passwordResetConfirm import PasswordResetConfirmService
 from bookly.auth.service.passwordResetRequest import PasswordResetRequestService
-from bookly.auth.userDto import PasswordResetConfirmModel, PasswordResetRequestDTO, UserCreateDTO, UserDTO, UserLoginDTO, UserBooksReviewsDTO, EmailDTO, UserCreateResponseDTO, UserVerifyResponseDTO
+from bookly.auth.userDto import (
+    PasswordResetConfirmModel,
+    PasswordResetRequestDTO,
+    UserCreateDTO,
+    UserDTO,
+    UserLoginDTO,
+    UserBooksReviewsDTO,
+    EmailDTO,
+    UserCreateResponseDTO,
+    UserVerifyResponseDTO,
+)
 from bookly.db.main import get_session
 from bookly.auth.userRepository import UserRepository
 from bookly.auth.userModel import User
@@ -19,9 +29,9 @@ from .dependencies import (
     RoleChecker,
 )
 from bookly.db.redis import add_jti_to_blocklist
-from bookly.errors import (InvalidCredentials, InvalidToken, UserNotFound)
-from bookly.mail import mail, create_message
+from bookly.errors import InvalidCredentials, InvalidToken, UserNotFound
 from bookly.db.main import get_session
+from bookly.celery_task import send_mail
 
 auth_router = APIRouter()
 role_checker = RoleChecker(["admin", "user"])
@@ -33,20 +43,21 @@ REFRESH_TOKEN_EXPIRY = 2  # days
 async def send_email(emails: EmailDTO):
     # emails = emails.addresses
     html = "<h1>Wel to the App!</h1>"
+    subject = f"Email testing Celery. Current time: {datetime.now()}"
 
-    message = create_message(
-        recipients=emails.addresses,
-        subject="Welcome",
-        body=html
-    )
+    send_mail.delay(emails.addresses, subject, html)
 
-    await mail.send_message(message)
-    
+    # Deprecated version:
+    # message = create_message(recipients=emails.addresses, subject="Welcome", body=html)
+    # await mail.send_message(message)
+
     return {"message": "Email sent successfully."}
+
 
 @auth_router.post("/signup", response_model=UserCreateResponseDTO)
 async def create_user_account(
-    user_data: UserCreateDTO, session: AsyncSession = Depends(get_session)
+    user_data: UserCreateDTO,
+    session: AsyncSession = Depends(get_session),
 ):
     userRepository = UserRepository()
     createUserService = CreateUserService(userRepository)
@@ -61,8 +72,9 @@ async def verify_user_account(token: str, session: AsyncSession = Depends(get_se
     """
     user_repository = UserRepository()
     validate_user_service = ValidateUserService(user_repository)
-    
+
     return await validate_user_service.execute(token, session)
+
 
 @auth_router.post("/login")
 async def login_users(
@@ -119,6 +131,7 @@ async def get_new_access_token(token_details: dict = Depends(RefreshTokenBearer(
 
     raise InvalidToken
 
+
 @auth_router.get("/me", response_model=UserBooksReviewsDTO)
 async def get_me(
     user: User = Depends(get_current_user), _: bool = Depends(role_checker)
@@ -140,10 +153,10 @@ async def revoke_token(token_detail: dict = Depends(AccessTokenBearer())):
         content={"message": "Loggued out successfully."}, status_code=status.HTTP_200_OK
     )
 
+
 @auth_router.post("/password-reset-request")
 async def password_reset_request(
-    email_data: PasswordResetRequestDTO, 
-    session: AsyncSession = Depends(get_session)
+    email_data: PasswordResetRequestDTO, session: AsyncSession = Depends(get_session)
 ):
     """
     Solicita el restablecimiento de contraseña enviando un email con el token.
@@ -153,11 +166,12 @@ async def password_reset_request(
 
     return await passRestRequestService.execute(email_data, session)
 
+
 @auth_router.post("/password-reset-confirm/{token}")
 async def password_reset_confirm(
     token: str,
-    passwords: PasswordResetConfirmModel, 
-    session: AsyncSession = Depends(get_session)
+    passwords: PasswordResetConfirmModel,
+    session: AsyncSession = Depends(get_session),
 ):
     """
     Confirma el restablecimiento de contraseña usando el token recibido por email.

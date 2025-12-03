@@ -16,8 +16,9 @@ class Settings(BaseSettings):
     JWT_SECRET: str
     JWT_ALGORITHM: str
     # Redis
-    REDIS_HOST: str = "localhost"
-    REDIS_PORT: int = 6379
+    REDIS_URL: str = "redis://localhost:6379/0"
+    # REDIS_HOST: str = "localhost"
+    # REDIS_PORT: int = 6379
     # Mail
     MAIL_USERNAME: str
     MAIL_PASSWORD: str
@@ -31,9 +32,17 @@ class Settings(BaseSettings):
     VALIDATE_CERTS: bool = True
     # Server configuration
     DOMAIN: str
-    
+
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
 # Instancia global de configuración
 settings: Settings = Settings()
+
+broker_url = settings.REDIS_URL
+result_backend = settings.REDIS_URL
+broker_connection_retry_on_startup = True
+
+# Nota: El pool de workers se especifica al iniciar el worker, no en la configuración
+# En Windows, usa: celery -A bookly.celery_task.c_app worker --pool=solo
+# O para concurrencia: celery -A bookly.celery_task.c_app worker --pool=threads
